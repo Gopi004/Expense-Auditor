@@ -18,7 +18,7 @@ async def audit_expense(
 ):
     # For now, we just acknowledge receipt
     return {
-        "status": "Received",
+        "status": "Received File and Description",
         "filename": file.filename,
         "purpose_captured": purpose,
         "message": "AI Auditor is ready for Phase 2!"
