@@ -1,20 +1,35 @@
 import os
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+import json
 
 load_dotenv()
 
+# 1. Database Setup
+DB_URL = "sqlite:///./expenses.db"
+engine = create_engine(DB_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# 2. Define the Table
+class ExpenseClaim(Base):
+    __tablename__ = "claims"
+    id = Column(Integer, primary_key=True, index=True)
+    merchant = Column(String)
+    amount = Column(Float)
+    status = Column(String) # Approved, Flagged, Rejected
+    reason = Column(String)
+
+Base.metadata.create_all(bind=engine)
+
 # Initialize the modern Gemini Client
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-# --- ADD THESE LINES TO DEBUG ---
-print("--- AVAILABLE MODELS ---")
-for m in client.models.list():
-    print(m.name)
-print("------------------------")
-# --------------------------------
 
 app = FastAPI()
 
@@ -31,6 +46,20 @@ BASE_POLICY = """
 - No alcohol allowed.
 - Receipts older than 30 days are rejected.
 """
+
+@app.get("/admin/all-claims")
+async def get_all_claims(x_user_role: str = Header(None)):
+    if x_user_role != "auditor":
+        raise HTTPException(status_code=403, detail="Only auditors can see this.")
+    
+    db = SessionLocal()
+    try:
+        claims= db.query(ExpenseClaim).all()
+        return {"claims": claims}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error fetching claims")
+    finally:
+        db.close()
 
 @app.post("/audit")
 async def audit_expense(file: UploadFile = File(...), purpose: str = Form(...)):
@@ -61,14 +90,28 @@ async def audit_expense(file: UploadFile = File(...), purpose: str = Form(...)):
     """
 
     response = client.models.generate_content(
-        model="models/gemini-2.5-flash", # Use 'gemini-1.5-flash'
+        model="models/gemini-2.5-flash", # Use 'gemini-2.5-flash'
         contents=[
             prompt,
             types.Part.from_bytes(data=image_bytes, mime_type=file.content_type)
         ]
     )
+
+    response_text = response.text.replace("```json", "").replace("```", "").strip()
+    auditData = json.loads(response_text)
+
+    db = SessionLocal()
+    new_claim = ExpenseClaim(
+        merchant=auditData['merchant'],
+        amount=auditData['amount'],
+        status=auditData['status'],
+        reason=auditData['reason']
+    )
+    db.add(new_claim)
+    db.commit()
+    db.close()
     
-    return {"analysis": response.text}
+    return {"analysis": auditData}
 
 if __name__ == "__main__":
     import uvicorn
