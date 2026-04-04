@@ -8,6 +8,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import json
+from datetime import datetime
 
 load_dotenv()
 
@@ -23,6 +24,7 @@ class ExpenseClaim(Base):
     id = Column(Integer, primary_key=True, index=True)
     merchant = Column(String)
     amount = Column(Float)
+    currency = Column(String)
     status = Column(String) # Approved, Flagged, Rejected
     reason = Column(String)
 
@@ -41,8 +43,8 @@ app.add_middleware(
 )
 
 BASE_POLICY = """
-- Dinner limit: $50
-- Lunch limit: $25
+- Dinner limit: $50 or Rs. 1000
+- Lunch limit: $25 or Rs. 500
 - No alcohol allowed.
 - Receipts older than 30 days are rejected.
 """
@@ -54,64 +56,84 @@ async def get_all_claims(x_user_role: str = Header(None)):
     
     db = SessionLocal()
     try:
-        claims= db.query(ExpenseClaim).all()
-        return {"claims": claims}
+        claims= db.query(ExpenseClaim).order_by(ExpenseClaim.id.desc()).all()
+        return {"claims": [
+            {
+                "id": c.id,
+                "merchant": c.merchant,
+                "amount": c.amount,
+                "currency": c.currency,
+                "status": c.status,
+                "reason": c.reason
+            }
+            for c in claims
+        ]}
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Error fetching claims")
+        print(f"Error fetching claims: {e}")
+        raise HTTPException(status_code=500, detail=f"Error fetching claims: {str(e)}")
     finally:
         db.close()
 
 @app.post("/audit")
 async def audit_expense(file: UploadFile = File(...), purpose: str = Form(...)):
-    image_bytes = await file.read()
-    
-    # Using Gemini 3 Flash (The latest version for 2026)
-    prompt = f"""
-    Analyze this receipt against this policy:
-    {BASE_POLICY}
-    
-    Employee Justification: {purpose}
-    
-    1. Perform OCR: Extract Merchant, Date (DD-MM-YYYY), Total Amount (float), and Currency.
-    2. Validation: Check if the receipt is blurry. If so, set is_blurry: true.
-    3. Policy Check: Compare the 'Total Amount' against the policy limits.
-    4. Logic Check: Does the 'Business Purpose' provided by the user make sense for this merchant?
+    try:
+        image_bytes = await file.read()
 
-    Return ONLY a JSON object with these keys: 
-    {{
-    "merchant": string,
-    "date": string, 
-    "amount": float, 
-    "currency": string, 
-    "is_blurry": boolean,
-    "status": "Approved" | "Flagged" | "Rejected",
-    "reason": string
-    }}
-    """
+        mime_type = file.content_type
 
-    response = client.models.generate_content(
-        model="models/gemini-2.5-flash", # Use 'gemini-2.5-flash'
-        contents=[
-            prompt,
-            types.Part.from_bytes(data=image_bytes, mime_type=file.content_type)
-        ]
-    )
+        print(f"Processing file: {file.filename} with type: {mime_type}")
+        
+        # Using Gemini 3 Flash (The latest version for 2026)
+        prompt = f"""
+        Analyze this receipt against this policy:
+        {BASE_POLICY}
+        
+        Employee Justification: {purpose}
+        
+        1. Perform OCR: Extract Merchant, Date (DD-MM-YYYY), Total Amount (float), and Currency. Compare the date against today's date {datetime.now().strftime('%d-%m-%Y')} to check if it's older than 30 days.
+        2. Validation: Check if the receipt is blurry. If so, set is_blurry: true.
+        3. Policy Check: Compare the 'Total Amount' against the policy limits.
+        4. Logic Check: Does the 'Business Purpose' provided by the user make sense for this merchant?
 
-    response_text = response.text.replace("```json", "").replace("```", "").strip()
-    auditData = json.loads(response_text)
+        Return ONLY a JSON object with these keys: 
+        {{
+        "merchant": string,
+        "date": string, 
+        "amount": float, 
+        "currency": string, 
+        "is_blurry": boolean,
+        "status": "Approved" | "Flagged" | "Rejected",
+        "reason": string
+        }}
+        """
 
-    db = SessionLocal()
-    new_claim = ExpenseClaim(
-        merchant=auditData['merchant'],
-        amount=auditData['amount'],
-        status=auditData['status'],
-        reason=auditData['reason']
-    )
-    db.add(new_claim)
-    db.commit()
-    db.close()
-    
-    return {"analysis": auditData}
+        response = client.models.generate_content(
+            model="models/gemini-2.5-flash", # Use 'gemini-2.5-flash'
+            contents=[
+                prompt,
+                types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+            ]
+        )
+
+        response_text = response.text.replace("```json", "").replace("```", "").strip()
+        auditData = json.loads(response_text)
+
+        db = SessionLocal()
+        new_claim = ExpenseClaim(
+            merchant=auditData['merchant'],
+            currency=auditData['currency'],
+            amount=auditData['amount'],
+            status=auditData['status'],
+            reason=auditData['reason']
+        )
+        db.add(new_claim)
+        db.commit()
+        db.close()
+        
+        return {"analysis": auditData}
+    except Exception as e:
+        print(f"Error during audit: {e}")
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

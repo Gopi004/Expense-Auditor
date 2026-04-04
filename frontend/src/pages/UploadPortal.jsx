@@ -38,8 +38,9 @@ const UploadPortal = () => {
             {/* File Input */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Receipt Image</label>
-              <input type="file" onChange={(e) => setFile(e.target.files[0])} 
+              <input type="file" accept="image/*,.pdf" onChange={(e) => setFile(e.target.files[0])} 
                 className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"/>
+                <p className='text-[12px] px-3 py-2 text-gray-500'>Max size: 5MB</p>
             </div>
 
             {/* Purpose Input */}

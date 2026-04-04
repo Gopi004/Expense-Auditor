@@ -36,10 +36,10 @@ const AdminDashboard = () => {
               {claims.map((claim) => (
                 <tr key={claim.id} className="border-b border-gray-200">
                   <td className="px-5 py-5 text-sm font-medium">{claim.merchant}</td>
-                  <td className="px-5 py-5 text-sm">${claim.amount}</td>
+                  <td className="px-5 py-5 w-30 align-middle text-sm">{claim.currency} {Number(claim.amount || 0).toFixed(2)}</td>
                   <td className="px-5 py-5 text-sm">
                     <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                      claim.status === "Approved" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                      claim.status === "Approved" ? "bg-green-100 text-green-700" : claim.status==="Rejected" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"
                     }`}>{claim.status}</span>
                   </td>
                   <td className="px-5 py-5 text-sm text-gray-600 italic">{claim.reason}</td>
