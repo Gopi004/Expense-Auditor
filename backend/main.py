@@ -9,6 +9,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import json
 from datetime import datetime
+from passlib.context import CryptContext
 
 load_dotenv()
 
@@ -18,6 +19,15 @@ engine = create_engine(DB_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+    role = Column(String)
+
 # 2. Define the Table
 class ExpenseClaim(Base):
     __tablename__ = "claims"
@@ -26,6 +36,7 @@ class ExpenseClaim(Base):
     amount = Column(Float)
     currency = Column(String)
     status = Column(String) # Approved, Flagged, Rejected
+    rules_violated = Column(String) # Store which rules were violated
     reason = Column(String)
 
 Base.metadata.create_all(bind=engine)
@@ -43,11 +54,43 @@ app.add_middleware(
 )
 
 BASE_POLICY = """
-- Dinner limit: $50 or Rs. 1000
-- Lunch limit: $25 or Rs. 500
-- No alcohol allowed.
-- Receipts older than 30 days are rejected.
+Rule 1.1: Dinner expenses are capped at Rs. 1000 ($50).
+Rule 1.2: Lunch expenses are capped at Rs. 500 ($25).
+Rule 1.3: Breakfast expenses are capped at Rs. 200 ($20).
+Rule 2.1: Alcohol of any kind is strictly prohibited and will result in automatic rejection.
+Rule 3.1: All receipts must be submitted within 30 days of the transaction date.
+Rule 4.1: Business purpose must align with the merchant (e.g., "Office supplies" for a tech store).
+Rule 5.1: Uber/Lyft allowed for business only. Tips capped at 20%.
+Rule 6.1: Standard rooms only. Mini-bar charges are REJECTED.
 """
+
+@app.post("/signin")
+async def signin(email: str=Form(...), password: str=Form(...), role: str=Form(...)):
+    db=SessionLocal()
+
+    exists= db.query(User).filter(User.email == email).first()
+    if exists:
+        db.close()
+        raise HTTPException(status_code=400, detail="User already exists.")
+    new_user = User(
+        email=email,
+        hashed_password=pwd_context.hash(password),
+        role=role
+    )
+    db.add(new_user)
+    db.commit()
+    db.close()
+    return {"message": "User created successfully."}
+
+@app.post("/login")
+async def login(email: str=Form(...), password: str=Form(...)):
+    db=SessionLocal()
+    user= db.query(User).filter(User.email == email).first()
+    if not user or not pwd_context.verify(password, user.hashed_password):
+        db.close()
+        raise HTTPException(status_code=401, detail="Invalid credentials.")
+    db.close()
+    return {"email": user.email, "role": user.role}
 
 @app.get("/admin/all-claims")
 async def get_all_claims(x_user_role: str = Header(None)):
@@ -64,6 +107,7 @@ async def get_all_claims(x_user_role: str = Header(None)):
                 "amount": c.amount,
                 "currency": c.currency,
                 "status": c.status,
+                "rules_violated": c.rules_violated,
                 "reason": c.reason
             }
             for c in claims
@@ -103,6 +147,7 @@ async def audit_expense(file: UploadFile = File(...), purpose: str = Form(...)):
         "currency": string, 
         "is_blurry": boolean,
         "status": "Approved" | "Flagged" | "Rejected",
+        "rules_violated": string, # List of rules that were violated
         "reason": string
         }}
         """

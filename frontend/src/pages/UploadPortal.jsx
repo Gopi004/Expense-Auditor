@@ -1,16 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 const UploadPortal = () => {
+  useEffect(() => {
+    document.title = "Submit Receipt | Expense Auditor";
+  }, []);
+
   const [file, setFile] = useState(null);
   const [purpose, setPurpose] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+  const [statusMessage, setStatusMessage] = useState("");
 
   const handleUpload = async () => {
     if (!file) return alert("Please select a receipt");
+
     setLoading(true);
-    
+    setTimeout(() => setStatusMessage("Uploading receipt..."), 0);
+    setTimeout(() => setStatusMessage("Scanning receipt..."), 1000);
+    setTimeout(() => setStatusMessage("Extracting data..."), 3000);
+    setTimeout(() => setStatusMessage("Checking against corporate policy..."), 5000);
+    // ... after Gemini responds ...
+    setTimeout(() => setStatusMessage("Finalizing audit results..."), 7000);
+
     const formData = new FormData();
     formData.append("file", file);
     formData.append("purpose", purpose);
@@ -24,6 +36,15 @@ const UploadPortal = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (result) {
+      window.scrollTo({ 
+        top: document.body.scrollHeight, 
+        behavior: 'smooth' 
+      });
+    }
+  }, [result]);
 
   return (
     <div className="min-h-screen bg-gray-50 p-8 font-sans">
@@ -53,7 +74,7 @@ const UploadPortal = () => {
 
             <button onClick={handleUpload} disabled={loading}
               className={`w-full py-3 rounded-lg font-bold text-white transition-all ${loading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}>
-              {loading ? "Analyzing Receipt..." : "Submit for Audit"}
+              {loading ? statusMessage : "Submit for Audit"}
             </button>
           </div>
         </div>
