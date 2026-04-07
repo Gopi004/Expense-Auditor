@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import logo from "../assets/apple-touch-icon.png";
+import toast from 'react-hot-toast';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -33,11 +34,31 @@ const Login = () => {
         
         navigate(res.data.role === "auditor" ? "/admin" : "/upload");
       } else {
-        alert("Account created! Please login.");
+        toast.success("Account created successfully! Please log in.",{
+          style: {
+            border: '1px solid #10b981',
+            padding: '16px',
+            color: '#064e3b',
+            borderRadius: '12px',
+            fontWeight: 'bold',
+          },
+          iconTheme: {
+            primary: '#10b981',
+            secondary: '#FFFAEE',
+          },
+        });
         setIsSignup(false);
       }
     } catch (err) {
-      alert(err.response?.data?.detail || "Authentication failed");
+      toast.error("Something went wrong",{
+        style: {
+          border: '1px solid #ef4444',
+          padding: '16px',
+          color: '#7f1d1d',
+          borderRadius: '12px',
+          fontWeight: 'bold',
+        }
+      });
     }
   };
 

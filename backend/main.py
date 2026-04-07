@@ -38,6 +38,7 @@ class ExpenseClaim(Base):
     status = Column(String) # Approved, Flagged, Rejected
     rules_violated = Column(String) # Store which rules were violated
     reason = Column(String)
+    email = Column(String) # Add email field to associate claims with users
 
 Base.metadata.create_all(bind=engine)
 
@@ -108,7 +109,8 @@ async def get_all_claims(x_user_role: str = Header(None)):
                 "currency": c.currency,
                 "status": c.status,
                 "rules_violated": c.rules_violated,
-                "reason": c.reason
+                "reason": c.reason,
+                "email": c.email
             }
             for c in claims
         ]}
@@ -118,8 +120,32 @@ async def get_all_claims(x_user_role: str = Header(None)):
     finally:
         db.close()
 
+@app.patch("/admin/update-status/{claim_id}")
+async def update_status(claim_id: int, status: str=Form(...), reason:str=Form(...)):
+    db=SessionLocal()
+    try:
+        claim=db.query(ExpenseClaim).filter(ExpenseClaim.id == claim_id).first()
+        if not claim:
+            raise HTTPException(status_code=404, detail="Claim not found.")
+        
+        claim.status=status
+        claim.reason=f"Manual Review: {reason}"
+        db.commit()
+        return {"message": "Claim status updated successfully."}
+    finally:
+        db.close()
+
+@app.get("/my-claims")
+async def my_claims(email: str):
+    db=SessionLocal()
+    try:
+        claims=db.query(ExpenseClaim).filter(ExpenseClaim.email==email).order_by(ExpenseClaim.id.desc()).all()
+        return{"claims": claims}
+    finally:
+        db.close()
+
 @app.post("/audit")
-async def audit_expense(file: UploadFile = File(...), purpose: str = Form(...)):
+async def audit_expense(file: UploadFile = File(...), purpose: str = Form(...), email: str = Form(...)):
     try:
         image_bytes = await file.read()
 
@@ -169,7 +195,8 @@ async def audit_expense(file: UploadFile = File(...), purpose: str = Form(...)):
             currency=auditData['currency'],
             amount=auditData['amount'],
             status=auditData['status'],
-            reason=auditData['reason']
+            reason=auditData['reason'],
+            email=email
         )
         db.add(new_claim)
         db.commit()
