@@ -4,6 +4,8 @@ import axios from 'axios';
 import Navbar from '../components/navbar';
 import toast from 'react-hot-toast';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
 const UploadPortal = () => {
   const navigate = useNavigate();
 
@@ -51,7 +53,7 @@ const UploadPortal = () => {
     formData.append("email", localStorage.getItem("userEmail"));
 
     try {
-      const response = await axios.post("http://localhost:8000/audit", formData);
+      const response = await axios.post(`${API_BASE_URL}/audit`, formData);
       setResult(response.data.analysis);
     } catch (error) {
       console.error("Upload failed", error);
@@ -64,7 +66,7 @@ const UploadPortal = () => {
   const fetchMyClaims = async () => {
     const email = localStorage.getItem("userEmail");
     try {
-      const res = await axios.get(`http://localhost:8000/my-claims?email=${email}`);
+      const res = await axios.get(`${API_BASE_URL}/my-claims?email=${email}`);
       setPastClaims(res.data.claims);
     } catch (err) {
       console.error("Error fetching history", err);

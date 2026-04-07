@@ -5,6 +5,8 @@ import Navbar from "../components/navbar";
 import { Check, X } from "lucide-react";
 import toast from 'react-hot-toast';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
 const AdminDashboard = () => {
   const navigate = useNavigate();
 
@@ -37,7 +39,7 @@ const AdminDashboard = () => {
   useEffect(() => {
     const fetchClaims = async () => {
       try {
-        const res = await axios.get("http://localhost:8000/admin/all-claims", {
+        const res = await axios.get(`${API_BASE_URL}/admin/all-claims`, {
           headers: { "x-user-role": "auditor" }
         });
         setClaims(res.data.claims);
@@ -62,7 +64,7 @@ const AdminDashboard = () => {
     formData.append("reason", manualReason);
 
     try {
-      await axios.patch(`http://localhost:8000/admin/update-status/${id}`, formData);
+      await axios.patch(`${API_BASE_URL}/admin/update-status/${id}`, formData);
       
       // Refresh the data locally so the UI updates immediately
       setClaims(prevClaims => 

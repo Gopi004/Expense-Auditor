@@ -4,6 +4,8 @@ import axios from "axios";
 import logo from "../assets/apple-touch-icon.png";
 import toast from 'react-hot-toast';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
 const Login = () => {
   const navigate = useNavigate();
 
@@ -25,7 +27,7 @@ const Login = () => {
 
     try {
       const endpoint = isSignup ? "/signin" : "/login";
-      const res = await axios.post(`http://localhost:8000${endpoint}`, formData);
+      const res = await axios.post(`${API_BASE_URL}${endpoint}`, formData);
       
       if (!isSignup) {
         // Store user info in LocalStorage so the app "remembers" them
